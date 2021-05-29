@@ -1,0 +1,79 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:alpine
+    restart: unless-stopped
+    expose:
+      - 5432
+    environment:
+      - POSTGRES_USER=espdb_user
+      - POSTGRES_PASSWORD=espdb_pass
+      - POSTGRES_DB=espcd_backend
+    volumes:
+      - postgres:/var/lib/postgresql/data
+  
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    expose:
+      - 6379
+
+  backend:
+    image: ghcr.io/espcd/espcd-backend
+    restart: unless-stopped
+    expose:
+      - 3000
+    environment:
+      - ESPCD_BACKEND_DATABASE_URL=postgres://espdb_user:espdb_pass@postgres/espcd_backend
+      - REDIS_URL=redis://redis:6379/1
+      - SECRET_KEY_BASE=secret-key-base
+      - VIRTUAL_HOST=api.espcd.duckdns.org
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=api.espcd.duckdns.org
+    command: sh -c "rake db:create && rake db:migrate && rails s -b 0.0.0.0"
+    depends_on:
+      - postgres
+      - redis
+
+  frontend:
+    image: lucasheld/espcd-frontend
+    restart: unless-stopped
+    expose:
+      - 80
+    environment:
+      - VIRTUAL_HOST=espcd.duckdns.org,www.espcd.duckdns.org
+      - LETSENCRYPT_HOST=espcd.duckdns.org,www.espcd.duckdns.org
+
+  proxy:
+    image: nginxproxy/nginx-proxy:alpine
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+    labels:
+      com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy: "true"
+    volumes:
+      - certs:/etc/nginx/certs:ro
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+
+  letsencrypt-companion:
+    image: nginxproxy/acme-companion
+    restart: unless-stopped
+    volumes:
+      - certs:/etc/nginx/certs
+      - vhost.d:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - acme:/etc/acme.sh
+    depends_on:
+      - proxy
+
+volumes:
+  postgres:
+  certs:
+  vhost.d:
+  html:
+  acme:
