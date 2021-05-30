@@ -46,7 +46,7 @@ services:
       - LETSENCRYPT_HOST=espcd.duckdns.org,www.espcd.duckdns.org
 
   proxy:
-    image: nginxproxy/nginx-proxy:alpine
+    build: ./proxy
     restart: unless-stopped
     ports:
       - 80:80
